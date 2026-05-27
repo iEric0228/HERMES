@@ -1,0 +1,6 @@
+aws_region       = "us-east-1"
+instance_type    = "t4g.small"
+key_name         = "my-key-pair"
+allowed_ssh_cidr = "YOUR_IP/32"
+data_volume_size = 50
+project_name     = "hermes"

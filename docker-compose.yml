@@ -1,0 +1,31 @@
+services:
+  gateway:
+    image: nousresearch/hermes-agent:latest
+    container_name: hermes
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - /data/hermes:/opt/data
+      - /data/documents:/opt/documents:ro
+    env_file:
+      - .env
+    environment:
+      - HERMES_UID=1000
+      - HERMES_GID=1000
+    command: ["gateway", "run"]
+
+  dashboard:
+    image: nousresearch/hermes-agent:latest
+    container_name: hermes-dashboard
+    restart: unless-stopped
+    network_mode: host
+    depends_on:
+      - gateway
+    volumes:
+      - /data/hermes:/opt/data
+    env_file:
+      - .env
+    environment:
+      - HERMES_UID=1000
+      - HERMES_GID=1000
+    command: ["dashboard", "--host", "127.0.0.1", "--no-open"]
