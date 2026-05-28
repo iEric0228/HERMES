@@ -48,18 +48,19 @@ fi
 # ---------- Ensure remote directories exist ----------
 
 echo "[1/5] Preparing remote directories..."
-ssh $SSH_OPTS "$REMOTE" "sudo mkdir -p /data/hermes /data/documents && sudo chown -R ubuntu:ubuntu /data/hermes /data/documents"
+ssh $SSH_OPTS "$REMOTE" "sudo mkdir -p /data/hermes /data/documents && sudo chown -R 10000:10000 /data/hermes /data/documents"
 
 # ---------- Migrate Hermes data ----------
 
 if [ "$SKIP_HERMES" = false ]; then
-  echo "[2/5] Syncing Hermes data (~/.hermes → /data/hermes)..."
+  echo "[2/5] Syncing Hermes data (~/.hermes -> /data/hermes)..."
   rsync -avz --progress \
     --exclude='*.pyc' \
     --exclude='__pycache__' \
     --exclude='.git' \
     -e "ssh $SSH_OPTS" \
     "$HERMES_LOCAL/" "$REMOTE:/data/hermes/"
+  ssh $SSH_OPTS "$REMOTE" "sudo chown -R 10000:10000 /data/hermes"
 else
   echo "[2/5] Skipped (no local Hermes data)."
 fi
@@ -71,6 +72,7 @@ if [ -n "$DOCS_DIR" ]; then
   rsync -avz --progress \
     -e "ssh $SSH_OPTS" \
     "$DOCS_DIR/" "$REMOTE:/data/documents/"
+  ssh $SSH_OPTS "$REMOTE" "sudo chown -R 10000:10000 /data/documents"
 else
   echo "[3/5] Skipped (no documents directory specified)."
 fi
@@ -108,6 +110,6 @@ echo ""
 echo "=== Migration complete ==="
 echo ""
 echo "Next steps:"
-echo "  1. Deploy Hermes:  ./scripts/deploy.sh $EC2_IP $SSH_KEY"
-echo "  2. Run setup:      ssh $SSH_OPTS $REMOTE 'cd /opt/hermes && docker compose exec gateway hermes setup'"
-echo "  3. Set model:      ssh $SSH_OPTS $REMOTE 'cd /opt/hermes && docker compose exec gateway hermes model'"
+echo "  1. Deploy Hermes:    ./scripts/deploy.sh $EC2_IP $SSH_KEY"
+echo "  2. Enable Discord:   ssh $SSH_OPTS $REMOTE 'docker exec hermes hermes config set gateway.discord.enabled true'"
+echo "  3. Select model:     ssh $SSH_OPTS $REMOTE 'docker exec hermes hermes config set model.default google/gemini-2.5-flash-preview'"

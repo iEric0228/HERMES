@@ -4,10 +4,19 @@ set -euo pipefail
 # Restore Hermes data from S3 (run on EC2)
 # Usage: ./scripts/restore.sh
 
-BUCKET=$(aws s3 ls | grep hermes-backup | awk '{print $3}' | head -1)
+CONF="/opt/hermes/backup.conf"
+
+# Load config (bucket name written by Terraform bootstrap)
+if [ -f "$CONF" ]; then
+  source "$CONF"
+  BUCKET="${BACKUP_BUCKET:-}"
+else
+  # Fallback: discover bucket by name prefix
+  BUCKET=$(aws s3 ls | grep hermes-backup | awk '{print $3}' | head -1)
+fi
 
 if [ -z "$BUCKET" ]; then
-  echo "ERROR: No hermes-backup S3 bucket found"
+  echo "ERROR: No backup bucket configured or discovered"
   exit 1
 fi
 
@@ -27,6 +36,7 @@ cd /opt/hermes && docker compose down
 echo "[2/3] Restoring data..."
 aws s3 sync "s3://$BUCKET/hermes/" /data/hermes/ --delete
 aws s3 sync "s3://$BUCKET/documents/" /data/documents/ --delete
+chown -R 10000:10000 /data/hermes /data/documents
 
 echo "[3/3] Restarting Hermes..."
 cd /opt/hermes && docker compose up -d

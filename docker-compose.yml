@@ -7,12 +7,16 @@ services:
     volumes:
       - /data/hermes:/opt/data
       - /data/documents:/opt/documents:ro
+      - hermes-state:/root/.local/state/hermes
     env_file:
       - .env
-    environment:
-      - HERMES_UID=1000
-      - HERMES_GID=1000
     command: ["gateway", "run"]
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep -q '[g]ateway run' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   dashboard:
     image: nousresearch/hermes-agent:latest
@@ -20,12 +24,19 @@ services:
     restart: unless-stopped
     network_mode: host
     depends_on:
-      - gateway
+      gateway:
+        condition: service_healthy
     volumes:
       - /data/hermes:/opt/data
     env_file:
       - .env
-    environment:
-      - HERMES_UID=1000
-      - HERMES_GID=1000
     command: ["dashboard", "--host", "127.0.0.1", "--no-open"]
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep -q '[d]ashboard' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  hermes-state:

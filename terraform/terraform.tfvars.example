@@ -1,6 +1,7 @@
-aws_region       = "us-east-1"
-instance_type    = "t4g.small"
-key_name         = "my-key-pair"
-allowed_ssh_cidr = "YOUR_IP/32"
-data_volume_size = 50
-project_name     = "hermes"
+aws_region         = "us-east-1"
+instance_type      = "t4g.medium"
+key_name           = "my-key-pair"
+allowed_ssh_cidr   = "YOUR_IP/32"
+data_volume_size   = 50
+project_name       = "hermes"
+notification_email = ""              # your@email.com for alerts (optional)

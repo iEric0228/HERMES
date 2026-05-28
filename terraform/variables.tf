@@ -7,7 +7,7 @@ variable "aws_region" {
 variable "instance_type" {
   description = "EC2 instance type"
   type        = string
-  default     = "t4g.small"
+  default     = "t4g.medium"
 }
 
 variable "key_name" {
@@ -30,4 +30,10 @@ variable "project_name" {
   description = "Name tag prefix for all resources"
   type        = string
   default     = "hermes"
+}
+
+variable "notification_email" {
+  description = "Email address for CloudWatch and backup alerts (leave empty to skip)"
+  type        = string
+  default     = ""
 }

@@ -27,3 +27,8 @@ output "data_volume_id" {
   description = "EBS data volume ID (survives instance termination)"
   value       = aws_ebs_volume.data.id
 }
+
+output "sns_topic_arn" {
+  description = "SNS topic ARN for alerts"
+  value       = aws_sns_topic.alerts.arn
+}

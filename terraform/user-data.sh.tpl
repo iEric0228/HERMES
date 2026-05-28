@@ -4,8 +4,8 @@ exec > >(tee /var/log/hermes-setup.log) 2>&1
 
 echo "=== Hermes VPS bootstrap ==="
 
-# Wait for the data EBS volume to appear.
-# Nitro/Graviton instances expose EBS as NVMe — discover the real device name.
+# Nitro/Graviton instances expose EBS as NVMe, not xvdf.
+# Discover the real device name by probing known paths.
 echo "Waiting for data volume..."
 DATA_DEVICE=""
 for i in $(seq 1 60); do
@@ -15,7 +15,7 @@ for i in $(seq 1 60); do
   sleep 2
 done
 if [ -z "$DATA_DEVICE" ]; then
-  echo "ERROR: data volume never appeared"
+  echo "ERROR: data volume never appeared after 120s"
   exit 1
 fi
 echo "Found data volume at $DATA_DEVICE"
@@ -28,11 +28,12 @@ fi
 # Mount data volume
 mkdir -p /data
 mount "$DATA_DEVICE" /data
-echo "LABEL=hermes-data /data ext4 defaults,nofail 0 2" >> /etc/fstab
+grep -q hermes-data /etc/fstab || \
+  echo "LABEL=hermes-data /data ext4 defaults,nofail 0 2" >> /etc/fstab
 
-# Create Hermes data directory
-mkdir -p /data/hermes
-chown 1000:1000 /data/hermes
+# Create data directories owned by the container's default hermes user (UID 10000)
+mkdir -p /data/hermes /data/documents
+chown -R 10000:10000 /data/hermes /data/documents
 
 # System updates
 export DEBIAN_FRONTEND=noninteractive
@@ -55,22 +56,46 @@ apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 # Add ubuntu user to docker group
 usermod -aG docker ubuntu
 
-# Enable swap (t3.small has only 2GB RAM)
-fallocate -l 2G /swapfile
+# 4GB swap as safety net
+fallocate -l 4G /swapfile
 chmod 600 /swapfile
 mkswap /swapfile
 swapon /swapfile
-echo "/swapfile swap swap defaults 0 0" >> /etc/fstab
+grep -q swapfile /etc/fstab || \
+  echo "/swapfile swap swap defaults 0 0" >> /etc/fstab
 
-# Install useful tools
+# Useful tools
 apt-get install -y awscli jq htop unzip rsync
 
-# Set up automatic security updates
+# Automatic security updates
 apt-get install -y unattended-upgrades
 dpkg-reconfigure -f noninteractive unattended-upgrades
 
-# Create hermes deployment directory
-mkdir -p /opt/hermes
-chown ubuntu:ubuntu /opt/hermes
+# Deployment directory
+mkdir -p /opt/hermes/scripts
+chown -R ubuntu:ubuntu /opt/hermes
+
+# Write config for backup and monitoring scripts
+cat > /opt/hermes/backup.conf <<CONF
+BACKUP_BUCKET=${backup_bucket}
+SNS_TOPIC_ARN=${sns_topic_arn}
+AWS_DEFAULT_REGION=${aws_region}
+CONF
+chown ubuntu:ubuntu /opt/hermes/backup.conf
+
+# Log rotation for Hermes (prevents data volume from filling up)
+cat > /etc/logrotate.d/hermes <<'LOGROTATE'
+/data/hermes/logs/*.log
+/data/hermes/logs/**/*.log {
+  daily
+  rotate 14
+  compress
+  delaycompress
+  missingok
+  notifempty
+  copytruncate
+  maxsize 100M
+}
+LOGROTATE
 
 echo "=== Bootstrap complete ==="

@@ -133,13 +133,34 @@ resource "aws_iam_role_policy" "s3_backup" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Effect   = "Allow"
-      Action   = ["s3:PutObject", "s3:GetObject", "s3:ListBucket", "s3:DeleteObject"]
+      Effect = "Allow"
+      Action = ["s3:PutObject", "s3:GetObject", "s3:ListBucket", "s3:DeleteObject"]
       Resource = [
         aws_s3_bucket.backup.arn,
         "${aws_s3_bucket.backup.arn}/*"
       ]
     }]
+  })
+}
+
+resource "aws_iam_role_policy" "monitoring" {
+  name = "${var.project_name}-monitoring"
+  role = aws_iam_role.hermes.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["sns:Publish"]
+        Resource = [aws_sns_topic.alerts.arn]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["cloudwatch:PutMetricData"]
+        Resource = ["*"]
+      }
+    ]
   })
 }
 
@@ -205,6 +226,60 @@ resource "aws_s3_bucket_lifecycle_configuration" "backup" {
   }
 }
 
+# ---------- Monitoring & Alerts ----------
+
+resource "aws_sns_topic" "alerts" {
+  name = "${var.project_name}-alerts"
+  tags = { Name = "${var.project_name}-alerts" }
+}
+
+resource "aws_sns_topic_subscription" "email" {
+  count     = var.notification_email != "" ? 1 : 0
+  topic_arn = aws_sns_topic.alerts.arn
+  protocol  = "email"
+  endpoint  = var.notification_email
+}
+
+resource "aws_cloudwatch_metric_alarm" "status_check" {
+  alarm_name          = "${var.project_name}-status-check-failed"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "StatusCheckFailed"
+  namespace           = "AWS/EC2"
+  period              = 60
+  statistic           = "Maximum"
+  threshold           = 0
+  alarm_description   = "EC2 instance failed status check (possible OOM or hardware issue)"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
+
+  dimensions = {
+    InstanceId = aws_instance.hermes.id
+  }
+
+  tags = { Name = var.project_name }
+}
+
+resource "aws_cloudwatch_metric_alarm" "high_cpu" {
+  alarm_name          = "${var.project_name}-high-cpu"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 3
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EC2"
+  period              = 300
+  statistic           = "Average"
+  threshold           = 90
+  alarm_description   = "CPU utilization above 90% for 15 minutes"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
+
+  dimensions = {
+    InstanceId = aws_instance.hermes.id
+  }
+
+  tags = { Name = var.project_name }
+}
+
 # ---------- EBS data volume ----------
 
 resource "aws_ebs_volume" "data" {
@@ -233,7 +308,9 @@ resource "aws_instance" "hermes" {
   }
 
   user_data = templatefile("${path.module}/user-data.sh.tpl", {
-    data_device = "/dev/xvdf"
+    backup_bucket = aws_s3_bucket.backup.id
+    sns_topic_arn = aws_sns_topic.alerts.arn
+    aws_region    = var.aws_region
   })
 
   tags = {
